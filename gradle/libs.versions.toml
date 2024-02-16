@@ -23,7 +23,7 @@
 #
 
 [versions]
-android = "8.2.1"
+android = "8.2.+"
 android-material = "1.6.+"
 androidx-junit = "1.1.5"
 androidx-ktx = "1.6.0"
@@ -35,7 +35,7 @@ mockito = "4.6.1"
 robolectric = "4.7.3"
 room = "2.4.2"
 room-testing = "1.1.1"
-up-java = "1.5.7-SNAPSHOT"
+up-java = "1.5.8"
 up-client-android-java = "1.5.+"
 
 [libraries]

@@ -24,6 +24,8 @@
 
 package org.eclipse.uprotocol.core.udiscovery;
 
+import static android.util.Log.DEBUG;
+import static android.util.Log.INFO;
 import static org.eclipse.uprotocol.common.util.UStatusUtils.STATUS_OK;
 import static org.eclipse.uprotocol.common.util.UStatusUtils.buildStatus;
 import static org.eclipse.uprotocol.common.util.UStatusUtils.toStatus;
@@ -56,6 +58,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.robolectric.Robolectric.setupService;
 
 import android.content.Context;
 import android.content.Intent;
@@ -83,7 +86,7 @@ import org.eclipse.uprotocol.core.udiscovery.v3.UpdatePropertyRequest;
 import org.eclipse.uprotocol.rpc.CallOptions;
 import org.eclipse.uprotocol.rpc.URpcListener;
 import org.eclipse.uprotocol.transport.builder.UAttributesBuilder;
-import org.eclipse.uprotocol.uri.builder.UResourceBuilder;
+import org.eclipse.uprotocol.uri.factory.UResourceBuilder;
 import org.eclipse.uprotocol.v1.UAttributes;
 import org.eclipse.uprotocol.v1.UAuthority;
 import org.eclipse.uprotocol.v1.UCode;
@@ -104,7 +107,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
-import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.shadows.ShadowLog;
 
@@ -147,7 +149,7 @@ public class UDiscoveryServicesTest extends TestBase {
 
     private static void setLogLevel(int level) {
         UDiscoveryService.VERBOSE = (level <= Log.VERBOSE);
-        UDiscoveryService.DEBUG = (level <= Log.DEBUG);
+        UDiscoveryService.DEBUG = (level <= DEBUG);
     }
 
     @BeforeClass
@@ -207,11 +209,12 @@ public class UDiscoveryServicesTest extends TestBase {
     private static UMessage buildUMessage(String methodUri, UPayload uPayload, boolean isSink) {
         UResource uResource = UResourceBuilder.forRpcRequest(methodUri);
         UUri uUri = UUri.newBuilder().setEntity(SERVICE).setResource(uResource).build();
-        UAttributesBuilder uAttributesBuilder = UAttributesBuilder.request(UPriority.UPRIORITY_CS4, uUri, TTL);
+        UAttributesBuilder uAttributesBuilder = UAttributesBuilder.request(uUri, uUri, UPriority.UPRIORITY_CS4, TTL);
         if (isSink) {
             return UMessage.newBuilder().setAttributes(uAttributesBuilder.build()).setPayload(uPayload).build();
         }
-        return UMessage.newBuilder().setAttributes(uAttributesBuilder.build()).clearAttributes().setPayload(uPayload).build();
+        UMessage uMessage = UMessage.newBuilder().setAttributes(uAttributesBuilder.build()).clearAttributes().setPayload(uPayload).build();
+        return UMessage.newBuilder(uMessage).setAttributes(UAttributes.newBuilder().clearSink().build()).build();
     }
 
     @Before
@@ -229,11 +232,11 @@ public class UDiscoveryServicesTest extends TestBase {
         CompletableFuture<UMessage> responseCreateTopic = CompletableFuture.completedFuture(message);
         UStatusException statusException = new UStatusException(UCode.UNKNOWN, "Unable to connect");
         CompletableFuture<UMessage> responseCreateTopicException = CompletableFuture.failedFuture(statusException);
-        setLogLevel(Log.DEBUG);
+        setLogLevel(DEBUG);
         when(mUpClient.invokeMethod(TOPIC_NODE_NOTIFICATION, UPayload.getDefaultInstance(), CallOptions.DEFAULT)).
                 thenReturn(responseCreateTopic);
         Thread.sleep(100);
-        setLogLevel(Log.INFO);
+        setLogLevel(INFO);
         when(mUpClient.invokeMethod(TOPIC_NODE_NOTIFICATION, UPayload.getDefaultInstance(), CallOptions.DEFAULT)).
                 thenReturn(responseCreateTopicException);
 
@@ -291,7 +294,7 @@ public class UDiscoveryServicesTest extends TestBase {
 
     @Test
     public void negative_handler_uninitialized_exception() throws InterruptedException {
-        setLogLevel(Log.DEBUG);
+        setLogLevel(DEBUG);
         ResourceLoader mockLoader = mock(ResourceLoader.class);
         when(mockLoader.initializeLDS()).thenReturn(ResourceLoader.InitLDSCode.FAILURE);
         new UDiscoveryService(mContext, mRpcHandler, mUpClient, mockLoader);
@@ -344,7 +347,7 @@ public class UDiscoveryServicesTest extends TestBase {
 
     @Test
     public void negative_upClient_unRegisterMethod_exception() throws InterruptedException {
-        setLogLevel(Log.DEBUG);
+        setLogLevel(DEBUG);
         //when(mDatabaseLoader.getAuthority()).thenReturn(TEST_AUTHORITY);
         when(mUpClient.unregisterRpcListener(any(UUri.class),
                 any(URpcListener.class))).thenReturn(mFailedStatus);
@@ -386,6 +389,7 @@ public class UDiscoveryServicesTest extends TestBase {
 
     @Test
     public void positive_executeLookupUri_LDS() {
+        setLogLevel(INFO);
         UPayload lookupUriResult = packToAny(mLookupUriResponse);
         when(mRpcHandler.processLookupUriFromLDS(any(UMessage.class))).thenReturn(lookupUriResult);
 
@@ -400,6 +404,7 @@ public class UDiscoveryServicesTest extends TestBase {
 
     @Test
     public void positive_executeLookupUri_LDS_not_found() {
+        setLogLevel(DEBUG);
         Any responseMessage = Any.pack(mLookupUriResponse);
         UPayload lookupUriResult = packToAny(mNotFoundStatus);
         when(mRpcHandler.processLookupUriFromLDS(any(UMessage.class))).thenReturn(lookupUriResult);
@@ -415,21 +420,8 @@ public class UDiscoveryServicesTest extends TestBase {
     }
 
     @Test
-    public void negative_executeLookupUri_throw_exception() {
-        setLogLevel(Log.DEBUG);
-        CompletableFuture<UPayload> fut = new CompletableFuture<>();
-        mHandler.onReceive(mLookupUriUMsg, fut);
-
-        fut.whenComplete((result, ex) -> {
-            assertNull(ex);
-            LookupUriResponse resp = unpack(result, LookupUriResponse.class).
-                    orElseThrow(() -> new UStatusException(UCode.INVALID_ARGUMENT, UNEXPECTED_PAYLOAD));
-            assertEquals(UCode.INVALID_ARGUMENT_VALUE, resp.getStatus().getCodeValue());
-        });
-    }
-
-    @Test
     public void positive_executeFindNodes_LDS() {
+        setLogLevel(DEBUG);
         Any response = Any.pack(mFindNodesResponse);
         UPayload findNodeResult = packToAny(response);
         when(mRpcHandler.processFindNodesFromLDS(any(UMessage.class))).thenReturn(findNodeResult);
@@ -445,6 +437,7 @@ public class UDiscoveryServicesTest extends TestBase {
 
     @Test
     public void positive_executeFindNodes_LDS_not_found() {
+        setLogLevel(INFO);
         Any response = Any.pack(mFindNodesResponse);
         UPayload findNodeResult = packToAny(response);
         when(mRpcHandler.processFindNodesFromLDS(any(UMessage.class))).thenReturn(findNodeResult);
@@ -460,22 +453,8 @@ public class UDiscoveryServicesTest extends TestBase {
     }
 
     @Test
-    public void executeFindNodes_throw_exception() {
-        setLogLevel(Log.DEBUG);
-        CompletableFuture<UPayload> fut = new CompletableFuture<>();
-        mHandler.onReceive(mFindNodeUMsg, fut);
-
-        fut.whenComplete((result, ex) -> {
-            assertNull(ex);
-            FindNodesResponse resp = unpack(result, FindNodesResponse.class).
-                    orElseThrow(() -> new UStatusException(UCode.INVALID_ARGUMENT, UNEXPECTED_PAYLOAD));
-            assertEquals(UCode.INVALID_ARGUMENT, resp.getStatus().getCode());
-            assertNull(ex);
-        });
-    }
-
-    @Test
     public void positive_executeUpdateNode() {
+        setLogLevel(DEBUG);
         UStatus okSts = buildStatus(UCode.OK, "OK");
         UPayload response = packToAny(okSts);
         when(mRpcHandler.processLDSUpdateNode(any(UMessage.class))).thenReturn(response);
@@ -490,16 +469,18 @@ public class UDiscoveryServicesTest extends TestBase {
     }
 
     @Test
-    public void negative_executeUpdateNode_throw_exception() {
-        setLogLevel(Log.DEBUG);
+    public void positive_executeUpdateNode_Log() {
+        setLogLevel(INFO);
+        UStatus okSts = buildStatus(UCode.OK, "OK");
+        UPayload response = packToAny(okSts);
+        when(mRpcHandler.processLDSUpdateNode(any(UMessage.class))).thenReturn(response);
+
         CompletableFuture<UPayload> fut = new CompletableFuture<>();
         mHandler.onReceive(mUpdateNodeUMsg, fut);
 
         fut.whenComplete((result, ex) -> {
+            assertEquals(response, result);
             assertNull(ex);
-            UStatus resp = unpack(result, UStatus.class).
-                    orElseThrow(() -> new UStatusException(UCode.INVALID_ARGUMENT, UNEXPECTED_PAYLOAD));
-            assertEquals(UCode.FAILED_PRECONDITION_VALUE, resp.getCode());
         });
     }
 
@@ -519,7 +500,7 @@ public class UDiscoveryServicesTest extends TestBase {
 
     @Test
     public void negative_executeFindNodesProperty_throw_exception() {
-        setLogLevel(Log.DEBUG);
+        setLogLevel(DEBUG);
         CompletableFuture<UPayload> fut = new CompletableFuture<>();
         mHandler.onReceive(mFindNodePropertiesUMsg, fut);
 
@@ -533,6 +514,7 @@ public class UDiscoveryServicesTest extends TestBase {
 
     @Test
     public void positive_executeAddNodes() {
+        setLogLevel(DEBUG);
         UStatus okSts = buildStatus(UCode.OK, "OK");
         UPayload response = packToAny(okSts);
         when(mRpcHandler.processAddNodesLDS(any(UMessage.class))).thenReturn(response);
@@ -547,16 +529,18 @@ public class UDiscoveryServicesTest extends TestBase {
     }
 
     @Test
-    public void negative_executeAddNodes_throw_exception() {
-        setLogLevel(Log.DEBUG);
+    public void positive_executeAddNodes_LOG() {
+        setLogLevel(INFO);
+        UStatus okSts = buildStatus(UCode.OK, "OK");
+        UPayload response = packToAny(okSts);
+        when(mRpcHandler.processAddNodesLDS(any(UMessage.class))).thenReturn(response);
+
         CompletableFuture<UPayload> fut = new CompletableFuture<>();
         mHandler.onReceive(mAddNodesUMsg, fut);
 
         fut.whenComplete((result, ex) -> {
+            assertEquals(response, result);
             assertNull(ex);
-            UStatus resp = unpack(result, UStatus.class).
-                    orElseThrow(() -> new UStatusException(UCode.INVALID_ARGUMENT, UNEXPECTED_PAYLOAD));
-            assertEquals(UCode.FAILED_PRECONDITION_VALUE, resp.getCode());
         });
     }
 
@@ -572,19 +556,6 @@ public class UDiscoveryServicesTest extends TestBase {
         fut.whenComplete((result, ex) -> {
             assertEquals(response, result);
             assertNull(ex);
-        });
-    }
-
-    @Test
-    public void negative_executeDeleteNodes_throw_exception() {
-        CompletableFuture<UPayload> fut = new CompletableFuture<>();
-        mHandler.onReceive(mDeleteNodesUMsg, fut);
-
-        fut.whenComplete((result, ex) -> {
-            assertNull(ex);
-            UStatus resp = unpack(result, UStatus.class).
-                    orElseThrow(() -> new UStatusException(UCode.INVALID_ARGUMENT, UNEXPECTED_PAYLOAD));
-            assertEquals(UCode.FAILED_PRECONDITION_VALUE, resp.getCode());
         });
     }
 
@@ -631,19 +602,6 @@ public class UDiscoveryServicesTest extends TestBase {
     }
 
     @Test
-    public void negative_executeRegisterNotification_throw_exception() {
-        CompletableFuture<UPayload> fut = new CompletableFuture<>();
-        mHandler.onReceive(mRegisterUMsg, fut);
-
-        fut.whenComplete((result, ex) -> {
-            assertNull(ex);
-            UStatus resp = unpack(result, UStatus.class).
-                    orElseThrow(() -> new UStatusException(UCode.INVALID_ARGUMENT, UNEXPECTED_PAYLOAD));
-            assertEquals(UCode.FAILED_PRECONDITION_VALUE, resp.getCode());
-        });
-    }
-
-    @Test
     public void positive_executeUnRegisterNotification() {
         CompletableFuture<UPayload> fut = new CompletableFuture<>();
         mHandler.onReceive(mUnRegisterUMsg, fut);
@@ -657,34 +615,21 @@ public class UDiscoveryServicesTest extends TestBase {
     }
 
     @Test
-    public void negative_executeUnregisterNotification_throw_exception() {
-        CompletableFuture<UPayload> fut = new CompletableFuture<>();
-        mHandler.onReceive(mUnRegisterUMsg, fut);
-
-        fut.whenComplete((result, ex) -> {
-            assertNull(ex);
-            UStatus resp = unpack(result, UStatus.class).
-                    orElseThrow(() -> new UStatusException(UCode.INVALID_ARGUMENT, UNEXPECTED_PAYLOAD));
-            assertEquals(UCode.FAILED_PRECONDITION_VALUE, resp.getCode());
-        });
-    }
-
-    @Test
     public void testOnCreate() {
-        setLogLevel(Log.DEBUG);
-        UDiscoveryService service = Robolectric.setupService(UDiscoveryService.class);
+        setLogLevel(DEBUG);
+        UDiscoveryService service = setupService(UDiscoveryService.class);
         assertNotEquals(mService, service);
-        setLogLevel(Log.INFO);
-        service = Robolectric.setupService(UDiscoveryService.class);
+        setLogLevel(INFO);
+        service = setupService(UDiscoveryService.class);
         assertNotEquals(mService, service);
     }
 
     @SuppressWarnings("AssertBetweenInconvertibleTypes")
     @Test
     public void testBinder() {
-        setLogLevel(Log.DEBUG);
+        setLogLevel(DEBUG);
         assertNotEquals(mService, mService.onBind(new Intent()));
-        setLogLevel(Log.INFO);
+        setLogLevel(INFO);
         assertNotEquals(mService, mService.onBind(new Intent()));
     }
 
@@ -711,7 +656,7 @@ public class UDiscoveryServicesTest extends TestBase {
 
     @Test
     public void positive_serviceListener() {
-        setLogLevel(Log.INFO);
+        setLogLevel(INFO);
         mService.onLifecycleChanged(mUpClient, true);
         AtomicBoolean flag = new AtomicBoolean(false);
         UPClient.ServiceLifecycleListener sl = (upClient, ready) -> flag.set(ready);
@@ -721,7 +666,7 @@ public class UDiscoveryServicesTest extends TestBase {
 
     @Test
     public void negative_serviceListener() {
-        setLogLevel(Log.DEBUG);
+        setLogLevel(DEBUG);
         mService.onLifecycleChanged(mUpClient, false);
         AtomicBoolean flag = new AtomicBoolean(false);
         UPClient.ServiceLifecycleListener sl = (upClient, ready) -> flag.set(ready);

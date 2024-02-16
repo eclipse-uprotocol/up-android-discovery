@@ -68,7 +68,7 @@ import org.eclipse.uprotocol.core.udiscovery.v3.FindNodesResponse;
 import org.eclipse.uprotocol.core.udiscovery.v3.LookupUriResponse;
 import org.eclipse.uprotocol.rpc.CallOptions;
 import org.eclipse.uprotocol.rpc.URpcListener;
-import org.eclipse.uprotocol.uri.builder.UResourceBuilder;
+import org.eclipse.uprotocol.uri.factory.UResourceBuilder;
 import org.eclipse.uprotocol.v1.UCode;
 import org.eclipse.uprotocol.v1.UMessage;
 import org.eclipse.uprotocol.v1.UPayload;

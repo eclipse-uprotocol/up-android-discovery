@@ -170,12 +170,11 @@ public class Notifier {
      */
     private void sendNotification(@NonNull UUri observer, @NonNull Notification notification) {
         Log.i(TAG, join(OBSERVER_URI, observer.toString(), NOTIFICATION, notification));
-        UAttributes attributes = UAttributes.newBuilder().setSink(observer).build();
+        UAttributes attributes = UAttributes.newBuilder().setSink(observer).setSource(TOPIC_NODE_NOTIFICATION).build();
         UPayload payload = packToAny(notification);
         UMessage message = UMessage.newBuilder()
                 .setPayload(payload)
                 .setAttributes(attributes)
-                .setSource(TOPIC_NODE_NOTIFICATION)
                 .build();
         mUpClient.send(message);
     }
