@@ -24,4 +24,4 @@ gradlew assembleRelease
 ----
 
 === Installing the Build
-Please follow link:../testing.adoc#installing-a-privileged-application[instructions] to install _UDiscoveryService.apk_ as a privileged application.
+Please follow link:testing.adoc#installing-a-privileged-application[instructions] to install _UDiscoveryService.apk_ as a privileged application.
