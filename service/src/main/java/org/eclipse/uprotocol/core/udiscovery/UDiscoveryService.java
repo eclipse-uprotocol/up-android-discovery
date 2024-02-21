@@ -145,7 +145,7 @@ public class UDiscoveryService extends Service implements UPClient.ServiceLifecy
         if (DEBUG) {
             Log.d(TAG, join(Key.EVENT, "onCreate - Starting uDiscovery"));
         }
-
+        startForegroundService();
         mUpClient = UPClient.create(getApplicationContext(), SERVICE, mExecutor, this);
         ObserverManager observerManager = new ObserverManager(this);
         Notifier notifier = new Notifier(observerManager, mUpClient);
@@ -154,7 +154,6 @@ public class UDiscoveryService extends Service implements UPClient.ServiceLifecy
         mResourceLoader = new ResourceLoader(this, assetManager, discoveryManager);
         mRpcHandler = new RPCHandler(this, assetManager, discoveryManager, observerManager);
         upClientInit();
-        startForegroundService();
     }
 
     private void startForegroundService() {
