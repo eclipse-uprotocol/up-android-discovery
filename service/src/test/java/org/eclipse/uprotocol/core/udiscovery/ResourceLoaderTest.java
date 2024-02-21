@@ -132,8 +132,9 @@ public class ResourceLoaderTest extends TestBase {
     @Test
     public void testLoadFailure1() {
         when(mAssetManager.readFileFromInternalStorage(appContext, Constants.LDS_DB_FILENAME)).thenReturn("corrupt lds");
-        UStatusException uStatusException = assertThrows(UStatusException.class, () -> mResourceLoader.initializeLDS());
-        assertEquals(UCode.FAILED_PRECONDITION, uStatusException.getCode());
+        DiscoveryManager discoveryManager = Mockito.spy(new DiscoveryManager(mNotifier));
+        mResourceLoader = Mockito.spy(new ResourceLoader(appContext, mAssetManager, discoveryManager, ResourceLoader.InitLDSCode.RECOVERY));
+        mResourceLoader.initializeLDS();
         verify(mAssetManager, times(1)).readFileFromInternalStorage(appContext, Constants.LDS_DB_FILENAME);
     }
 
@@ -158,5 +159,12 @@ public class ResourceLoaderTest extends TestBase {
         when(discoveryManager.load(REGISTRY_JSON)).thenReturn(true);
         mResourceLoader = Mockito.spy(new ResourceLoader(appContext, mAssetManager, discoveryManager, ResourceLoader.InitLDSCode.RECOVERY));
         assertEquals(ResourceLoader.InitLDSCode.RECOVERY, mResourceLoader.initializeLDS());
+    }
+
+    @Test
+    public void testLoadFailure4() {
+        when(mAssetManager.readFileFromInternalStorage(appContext, Constants.LDS_DB_FILENAME)).thenReturn("");
+        mResourceLoader.initializeLDS();
+        verify(mAssetManager, times(1)).readFileFromInternalStorage(appContext, Constants.LDS_DB_FILENAME);
     }
 }

@@ -26,6 +26,7 @@ package org.eclipse.uprotocol.core.udiscovery;
 
 import static org.eclipse.uprotocol.common.util.UStatusUtils.toStatus;
 import static org.eclipse.uprotocol.common.util.log.Formatter.join;
+import static org.eclipse.uprotocol.common.util.log.Formatter.status;
 import static org.eclipse.uprotocol.common.util.log.Formatter.tag;
 
 import android.util.Log;
@@ -76,7 +77,7 @@ public class TestBase {
         try {
             JsonFormat.parser().merge(json, bld);
         } catch (InvalidProtocolBufferException e) {
-            Log.e(TAG, join(Key.MESSAGE, "jsonToNode", Key.FAILURE, toStatus(e)));
+            Log.e(TAG, status(Key.FAILURE, toStatus(e)));
         }
         return bld.build();
     }

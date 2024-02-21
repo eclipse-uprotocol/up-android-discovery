@@ -25,7 +25,7 @@
 package org.eclipse.uprotocol.core.udiscovery;
 
 import static org.eclipse.uprotocol.common.util.UStatusUtils.toStatus;
-import static org.eclipse.uprotocol.common.util.log.Formatter.join;
+import static org.eclipse.uprotocol.common.util.log.Formatter.status;
 import static org.eclipse.uprotocol.common.util.log.Formatter.tag;
 import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.SERVICE;
 
@@ -93,10 +93,10 @@ public class AssetManager {
             return buffer.toString();
 
         } catch (FileNotFoundException e) {
-            Log.e(TAG, join("readFileFromInternalStorage", toStatus(e)));
+            Log.e(TAG, status("readFileFromInternalStorage", toStatus(e)));
             e.printStackTrace();
         } catch (IOException e) {
-            Log.e(TAG, join("readFileFromInternalStorage", toStatus(e)));
+            Log.e(TAG, status("readFileFromInternalStorage", toStatus(e)));
             e.printStackTrace();
         }
         return "";
@@ -118,7 +118,7 @@ public class AssetManager {
             writer.close();
             return true;
         } catch (IOException e) {
-            Log.e(TAG, join("writeFileToInternalStorage", toStatus(e)));
+            Log.e(TAG, status("writeFileToInternalStorage", toStatus(e)));
             e.printStackTrace();
         }
         return false;

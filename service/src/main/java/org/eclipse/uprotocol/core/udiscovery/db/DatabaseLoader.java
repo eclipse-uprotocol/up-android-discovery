@@ -29,7 +29,8 @@ import static org.eclipse.uprotocol.common.util.UStatusUtils.checkArgument;
 import static org.eclipse.uprotocol.common.util.UStatusUtils.checkArgumentPositive;
 import static org.eclipse.uprotocol.common.util.UStatusUtils.checkNotNull;
 import static org.eclipse.uprotocol.common.util.UStatusUtils.checkStringNotEmpty;
-import static org.eclipse.uprotocol.common.util.log.Formatter.join;
+import static org.eclipse.uprotocol.common.util.UStatusUtils.toStatus;
+import static org.eclipse.uprotocol.common.util.log.Formatter.status;
 import static org.eclipse.uprotocol.common.util.log.Formatter.tag;
 import static org.eclipse.uprotocol.core.udiscovery.internal.Utils.hasCharAt;
 import static org.eclipse.uprotocol.core.udiscovery.internal.Utils.parseAuthority;
@@ -307,7 +308,7 @@ public abstract class DatabaseLoader {
             childList.remove(childList.size() - 1);
             return parentList.equals(childList);
         } catch (UStatusException e) {
-            Log.e(TAG, join("verifyParentChild", e.getMessage()));
+            Log.e(TAG, status("verifyParentChild", toStatus(e)));
         }
         return false;
     }

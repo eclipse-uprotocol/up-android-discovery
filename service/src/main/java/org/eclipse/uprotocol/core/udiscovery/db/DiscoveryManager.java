@@ -31,6 +31,7 @@ import static org.eclipse.uprotocol.common.util.UStatusUtils.checkStringNotEmpty
 import static org.eclipse.uprotocol.common.util.UStatusUtils.toStatus;
 import static org.eclipse.uprotocol.common.util.log.Formatter.join;
 import static org.eclipse.uprotocol.common.util.log.Formatter.quote;
+import static org.eclipse.uprotocol.common.util.log.Formatter.status;
 import static org.eclipse.uprotocol.common.util.log.Formatter.tag;
 import static org.eclipse.uprotocol.core.udiscovery.common.Constants.JSON_AUTHORITY;
 import static org.eclipse.uprotocol.core.udiscovery.common.Constants.JSON_DATA;
@@ -146,7 +147,7 @@ public class DiscoveryManager extends DatabaseLoader {
             ldsTree = Node.newBuilder().setUri(domainUri).setType(Node.Type.DOMAIN).addNodes(deviceNode).build();
             return true;
         } catch (UStatusException e) {
-            Log.e(TAG, join(Key.EVENT, "init", Key.MESSAGE, e.getMessage()));
+            Log.e(TAG, status("init", toStatus(e)));
             return false;
         }
     }
@@ -466,9 +467,9 @@ public class DiscoveryManager extends DatabaseLoader {
             return true;
 
         } catch (InvalidProtocolBufferException e) {
-            Log.e(TAG, join("load", e.getMessage()));
+            Log.e(TAG, status("load", toStatus(e)));
         } catch (Exception e) {
-            Log.e(TAG, join("load", e.getMessage()));
+            Log.e(TAG, join("load", toStatus(e)));
         }
         return false;
     }

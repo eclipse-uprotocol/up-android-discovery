@@ -40,6 +40,7 @@ import androidx.annotation.VisibleForTesting;
 import org.eclipse.uprotocol.common.UStatusException;
 import org.eclipse.uprotocol.common.util.log.Key;
 import org.eclipse.uprotocol.core.udiscovery.db.DiscoveryManager;
+import org.eclipse.uprotocol.v1.UCode;
 
 /**
  * The ResourceLoader class is responsible for loading resources in the application.
@@ -110,10 +111,18 @@ public class ResourceLoader {
      * @return An instance of InitLDSCode indicating the status of the operation.
      * @throws UStatusException If an error occurs during the operation.
      */
-    public InitLDSCode initializeLDS() throws UStatusException {
+    public InitLDSCode initializeLDS() {
         InitLDSCode code = InitLDSCode.FAILURE;
-        load(LDS_DB_FILENAME);
-        code = (null != mCode) ? mCode : InitLDSCode.SUCCESS;
+        try {
+            load(LDS_DB_FILENAME);
+            code = (null != mCode) ? mCode : InitLDSCode.SUCCESS;
+        } catch (UStatusException e) {
+            Log.e(TAG, join(Key.MESSAGE, "load", Key.FAILURE, e.getCode()));
+            if (e.getCode().equals(UCode.INVALID_ARGUMENT)) {
+                // first boot or factory reset
+                code = InitLDSCode.RECOVERY;
+            }
+        }
         if (code == InitLDSCode.RECOVERY) {
             Log.w(TAG, join(Key.MESSAGE, "initializing empty LDS database"));
             mDiscoveryMgr.init(LDS_AUTHORITY);
