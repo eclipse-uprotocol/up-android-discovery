@@ -35,6 +35,7 @@ import static org.eclipse.uprotocol.core.udiscovery.common.Constants.TOPIC_NODE_
 import static org.eclipse.uprotocol.core.udiscovery.common.Constants.UNEXPECTED_PAYLOAD;
 import static org.eclipse.uprotocol.core.udiscovery.db.JsonNodeTest.REGISTRY_JSON;
 import static org.eclipse.uprotocol.core.udiscovery.internal.Utils.hasCharAt;
+import static org.eclipse.uprotocol.core.udiscovery.internal.Utils.toLongUri;
 import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.METHOD_ADD_NODES;
 import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.METHOD_DELETE_NODES;
 import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.METHOD_FIND_NODES;
@@ -363,7 +364,7 @@ public class UDiscoveryServicesTest extends TestBase {
     public void negative_withoutSink_handleRequestEvent() {
         UUri uri = UUri.newBuilder().setEntity(TEST_ENTITY).
                 setResource(UResourceBuilder.forRpcRequest("fakeMethod")).build();
-        UMessage uMsg = buildUMessage(uri.toString(), packToAny(Any.getDefaultInstance()), false);
+        UMessage uMsg = buildUMessage(toLongUri(uri), packToAny(Any.getDefaultInstance()), false);
         CompletableFuture<UPayload> fut = new CompletableFuture<>();
         mHandler.onReceive(uMsg, fut);
         fut.whenComplete((result, ex) -> {
@@ -378,7 +379,7 @@ public class UDiscoveryServicesTest extends TestBase {
                 setSink(UUri.newBuilder().setAuthority(UAuthority.newBuilder().setName("hello"))).build();
         UUri uri = UUri.newBuilder().setEntity(SERVICE).
                 setResource(UResourceBuilder.forRpcRequest("fakeMethod")).build();
-        UMessage uMsg = buildUMessage(uri.toString(), packToAny(Any.getDefaultInstance()), true);
+        UMessage uMsg = buildUMessage(toLongUri(uri), packToAny(Any.getDefaultInstance()), true);
         CompletableFuture<UPayload> fut = new CompletableFuture<>();
         mHandler.onReceive(uMsg, fut);
         fut.whenComplete((result, ex) -> {

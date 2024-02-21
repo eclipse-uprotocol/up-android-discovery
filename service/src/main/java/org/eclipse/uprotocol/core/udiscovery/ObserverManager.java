@@ -310,9 +310,9 @@ public class ObserverManager {
             return Collections.emptySet();
         }
         if (DEBUG) {
-            Log.d(TAG, join(Key.MESSAGE, "List of observer(s) for node", NODEURI, nodeUri.toString()));
+            Log.d(TAG, join(Key.MESSAGE, "List of observer(s) for node", NODEURI, toLongUri(nodeUri)));
             for (UUri observerUri : observers) {
-                Log.d(TAG, join(OBSERVER_URI, observerUri.toString()));
+                Log.d(TAG, join(OBSERVER_URI, toLongUri(observerUri)));
             }
         }
         return observers;
