@@ -182,7 +182,7 @@ public class UDiscoveryService extends Service implements UPClient.ServiceLifecy
         if (DEBUG) {
             Log.d(TAG, join(Key.EVENT, "upClientInit"));
         }
-        return (CompletableFuture<Void>) mUpClient.connect()
+        return mUpClient.connect()
                 .thenCompose(status -> {
                     Log.i(TAG, join(Key.MESSAGE, "upClient.isConnected()", Key.CONNECTION, mUpClient.isConnected()));
                     return isOk(status) ?
@@ -196,7 +196,7 @@ public class UDiscoveryService extends Service implements UPClient.ServiceLifecy
                         registerAllMethods();
                         createNotificationTopic();
                     }
-                });
+                }).toCompletableFuture();
     }
 
     private void registerAllMethods() {
