@@ -283,8 +283,8 @@ public abstract class DatabaseLoader {
                     "[verifyLineage] node already exists " + childUri);
             final boolean result = verifyParentChild(parentUri, childUri);
             checkArgument(result, "[verifyLineage] invalid hierarchy: " +
-                    parent.getType() + " { " + parent.getUri() + " } --> " +
-                    child.getType() + " { " + parentUri + " }");
+                    parent.getType() + " { " + parentUri + " } --> " +
+                    child.getType() + " { " + childUri + " }");
         }
     }
 
