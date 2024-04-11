@@ -30,7 +30,7 @@ import static org.eclipse.uprotocol.common.util.log.Formatter.join;
 import static org.eclipse.uprotocol.common.util.log.Formatter.quote;
 import static org.eclipse.uprotocol.common.util.log.Formatter.tag;
 import static org.eclipse.uprotocol.core.udiscovery.Notifier.OBSERVER_URI;
-import static org.eclipse.uprotocol.core.udiscovery.RPCHandler.NODEURI;
+import static org.eclipse.uprotocol.core.udiscovery.RPCHandler.NODE_URI;
 import static org.eclipse.uprotocol.core.udiscovery.internal.Utils.logStatus;
 import static org.eclipse.uprotocol.core.udiscovery.internal.Utils.toLongUri;
 import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.SERVICE;
@@ -177,7 +177,7 @@ public class ObserverManager {
             wrapper.added = observers.add(observer);
             if (DEBUG) {
                 Log.d(TAG, join(Key.EVENT, "addObserverToMap",
-                        NODEURI, toLongUri(nodeUri),
+                        NODE_URI, toLongUri(nodeUri),
                         OBSERVER_URI, toLongUri(observer)));
             }
             return observers;
@@ -268,7 +268,7 @@ public class ObserverManager {
             }
             if (DEBUG) {
                 Log.d(TAG, join(Key.EVENT, "removeObserverFromMap",
-                        NODEURI, toLongUri(nodeUri),
+                        NODE_URI, toLongUri(nodeUri),
                         OBSERVER_URI, toLongUri(observer)));
             }
             return observers;
@@ -310,7 +310,7 @@ public class ObserverManager {
             return Collections.emptySet();
         }
         if (DEBUG) {
-            Log.d(TAG, join(Key.MESSAGE, "List of observer(s) for node", NODEURI, toLongUri(nodeUri)));
+            Log.d(TAG, join(Key.MESSAGE, "List of observer(s) for node", NODE_URI, toLongUri(nodeUri)));
             for (UUri observerUri : observers) {
                 Log.d(TAG, join(OBSERVER_URI, toLongUri(observerUri)));
             }
@@ -329,7 +329,7 @@ public class ObserverManager {
                 for (UUri observer : entry.getValue()) {
                     String key = toLongUri(entry.getKey());
                     String val = toLongUri(observer);
-                    Log.v(TAG, join(NODEURI, quote(key), OBSERVER_URI, quote(val)));
+                    Log.v(TAG, join(NODE_URI, quote(key), OBSERVER_URI, quote(val)));
                 }
             }
         }

@@ -83,18 +83,17 @@ android {
     testOptions {
         unitTests {
             includeAndroidResources = true
-            all {
+            unitTests.all {
                 testLogging {
-                    exceptionFormat "full"
+                    exceptionFormat 'full'
                     events 'passed', 'skipped', 'failed'
                     outputs.upToDateWhen { false }
                     showStandardStreams = true
                     jacoco {
                         includeNoLocationClasses = true
-                        excludes = ['jdk.internal.*']
+                        excludes = ['*']
                     }
                 }
-                jvmArgs '-noverify'
             }
         }
     }

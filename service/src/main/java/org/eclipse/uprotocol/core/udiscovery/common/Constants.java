@@ -30,7 +30,6 @@ import org.eclipse.uprotocol.v1.UAuthority;
 import org.eclipse.uprotocol.v1.UResource;
 import org.eclipse.uprotocol.v1.UUri;
 
-
 public class Constants {
     /******************************************************************************
      * This code general constant declaration class.
@@ -42,15 +41,21 @@ public class Constants {
     public static final String JSON_DATA = "data";
     public static final String JSON_HASH = "hash";
     public static final String LDS_DB_FILENAME = "lds.json";
-    public static final String LDS_DEVICE_NAME = "device_name";
-    public static final String LDS_DOMAIN_NAME = "domain_name";
-    public static final UAuthority LDS_AUTHORITY = UAuthority.newBuilder().setName(
-            String.join(".", LDS_DEVICE_NAME, LDS_DOMAIN_NAME)).build();
+    public static final String LDS_DEVICE_NAME = "device";
+    public static final String LDS_DOMAIN_NAME = "domain";
+    public static final UAuthority LDS_AUTHORITY = UAuthority.newBuilder()
+            .setName(String.join(".", LDS_DEVICE_NAME, LDS_DOMAIN_NAME))
+            .build();
 
     public static final String UNEXPECTED_PAYLOAD = "Unexpected payload";
 
-    public static final UUri TOPIC_NODE_NOTIFICATION = UUri.newBuilder().setEntity(SERVICE)
-                .setResource(UResource.newBuilder().setName("nodes").setMessage("Notification").build()).build();
+    public static final UUri TOPIC_NODE_NOTIFICATION = UUri.newBuilder()
+            .setEntity(SERVICE)
+            .setResource(UResource.newBuilder()
+                    .setName("nodes")
+                    .setMessage("Notification")
+                    .build())
+            .build();
 
     private Constants() {
     }

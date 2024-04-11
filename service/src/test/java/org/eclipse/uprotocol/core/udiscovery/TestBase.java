@@ -25,7 +25,6 @@
 package org.eclipse.uprotocol.core.udiscovery;
 
 import static org.eclipse.uprotocol.common.util.UStatusUtils.toStatus;
-import static org.eclipse.uprotocol.common.util.log.Formatter.join;
 import static org.eclipse.uprotocol.common.util.log.Formatter.status;
 import static org.eclipse.uprotocol.common.util.log.Formatter.tag;
 
@@ -38,19 +37,19 @@ import com.google.protobuf.util.JsonFormat;
 
 import org.eclipse.uprotocol.common.util.log.Key;
 import org.eclipse.uprotocol.core.udiscovery.v3.Node;
-import org.eclipse.uprotocol.core.udiscovery.v3.NotificationsRequest;
-import org.eclipse.uprotocol.core.udiscovery.v3.ObserverInfo;
 import org.eclipse.uprotocol.v1.UAuthority;
 import org.eclipse.uprotocol.v1.UEntity;
 
-import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
+@SuppressWarnings("SameParameterValue")
 public class TestBase {
     public static final String TAG = tag("core", TestBase.class.getSimpleName());
     public static final String SERVICE_NAME = "core.udiscovery";
     public static final String TEST_VIN = "1gk12d1t2n10339dc";
-    public static final String TEST_DOMAIN = TEST_VIN + ".veh.protocol.gm.com";
-    public static final String TEST_DEVICE = "vcu";
+    public static final String TEST_DOMAIN = TEST_VIN + ".test.org";
+    public static final String TEST_DEVICE = "device";
     public static final String TEST_NAME = String.join(".", TEST_DEVICE, TEST_DOMAIN);
     public static final UAuthority TEST_AUTHORITY = UAuthority.newBuilder().setName(TEST_NAME).build();
     public static final String TEST_ALTERNATE_DEVICE = "cgm";
@@ -69,8 +68,8 @@ public class TestBase {
     public static final UEntity TEST_ENTITY = UEntity.newBuilder().setName(TEST_ENTITY_NAME).setVersionMajor(1).build();
     public static final UAuthority TEST_AUTHORITY2 = UAuthority.newBuilder().setName(TEST_ALTERNATE_ENTITY).build();
     public static final int DEFAULT_DEPTH = -1;
-
-    protected static final int TTL = 10000;
+    public static final int TTL = 10000;
+    public static final int DELAY_MS = 100;
 
     protected static @NonNull Node jsonToNode(String json) {
         Node.Builder bld = Node.newBuilder();
@@ -82,10 +81,11 @@ public class TestBase {
         return bld.build();
     }
 
-    protected NotificationsRequest buildNotificationRequest(List<String> nodeUris, String observerUri) {
-        return NotificationsRequest.newBuilder()
-                .addAllUris(nodeUris)
-                .setObserver(ObserverInfo.newBuilder().setUri(observerUri).build())
-                .build();
+    protected void sleep(long timeout) {
+        try {
+            new CompletableFuture<>().get(timeout, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (Exception ignored) {}
     }
 }
