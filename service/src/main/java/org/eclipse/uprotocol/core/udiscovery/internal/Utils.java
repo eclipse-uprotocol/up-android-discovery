@@ -1,6 +1,7 @@
 package org.eclipse.uprotocol.core.udiscovery.internal;
 
 import static org.eclipse.uprotocol.common.util.UStatusUtils.checkArgument;
+import static org.eclipse.uprotocol.common.util.UStatusUtils.isOk;
 import static org.eclipse.uprotocol.common.util.log.Formatter.status;
 
 import android.util.Log;
@@ -130,7 +131,7 @@ public final class Utils {
      */
     public static @NonNull UStatus logStatus(@NonNull String tag, @NonNull String method, @NonNull UStatus status,
                                          Object... args) {
-        if ((status != null) && (status.getCode() == UCode.OK)) {
+        if (isOk(status)) {
             Log.i(tag, status(method, status, args));
         } else {
             Log.e(tag, status(method, status, args));

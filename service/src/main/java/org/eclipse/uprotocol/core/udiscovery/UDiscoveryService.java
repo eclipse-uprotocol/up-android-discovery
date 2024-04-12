@@ -24,15 +24,12 @@
 
 package org.eclipse.uprotocol.core.udiscovery;
 
-import static org.eclipse.uprotocol.common.util.UStatusUtils.buildStatus;
 import static org.eclipse.uprotocol.common.util.UStatusUtils.checkArgument;
 import static org.eclipse.uprotocol.common.util.UStatusUtils.isOk;
 import static org.eclipse.uprotocol.common.util.UStatusUtils.toStatus;
 import static org.eclipse.uprotocol.common.util.log.Formatter.join;
-import static org.eclipse.uprotocol.common.util.log.Formatter.quote;
 import static org.eclipse.uprotocol.common.util.log.Formatter.stringify;
 import static org.eclipse.uprotocol.common.util.log.Formatter.tag;
-import static org.eclipse.uprotocol.core.udiscovery.common.Constants.TOPIC_NODE_NOTIFICATION;
 import static org.eclipse.uprotocol.core.udiscovery.internal.Utils.logStatus;
 import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.METHOD_ADD_NODES;
 import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.METHOD_DELETE_NODES;
@@ -49,7 +46,6 @@ import static org.eclipse.uprotocol.transport.builder.UPayloadBuilder.packToAny;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
-import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
 import android.os.IBinder;
@@ -66,8 +62,8 @@ import org.eclipse.uprotocol.core.udiscovery.db.DiscoveryManager;
 import org.eclipse.uprotocol.core.udiscovery.v3.FindNodePropertiesResponse;
 import org.eclipse.uprotocol.core.udiscovery.v3.FindNodesResponse;
 import org.eclipse.uprotocol.core.udiscovery.v3.LookupUriResponse;
-import org.eclipse.uprotocol.rpc.CallOptions;
-import org.eclipse.uprotocol.rpc.URpcListener;
+import org.eclipse.uprotocol.transport.UListener;
+import org.eclipse.uprotocol.transport.builder.UAttributesBuilder;
 import org.eclipse.uprotocol.uri.factory.UResourceBuilder;
 import org.eclipse.uprotocol.v1.UCode;
 import org.eclipse.uprotocol.v1.UMessage;
@@ -81,10 +77,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
- * UDiscoveryService is a class that extends the Android Service class and implements the UPClient.ServiceLifecycleListener interface.
  * This service is responsible for handling various methods related to the UProtocol discovery process.
  * It manages the lifecycle of the UPClient and handles RPC requests.
  * <p>
@@ -96,7 +91,7 @@ import java.util.function.BiConsumer;
  * This class is part of the UProtocol core discovery package.
  */
 @SuppressWarnings({"java:S1200", "java:S3008", "java:S1134"})
-public class UDiscoveryService extends Service implements UPClient.ServiceLifecycleListener {
+public class UDiscoveryService extends Service {
     public static final String TAG = tag(SERVICE.getName());
     private static final CharSequence NOTIFICATION_CHANNEL_NAME = TAG;
     private static final int NOTIFICATION_ID = 1;
@@ -105,8 +100,8 @@ public class UDiscoveryService extends Service implements UPClient.ServiceLifecy
     protected static boolean VERBOSE = Log.isLoggable(TAG, Log.VERBOSE);
     protected static boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
     private final ScheduledExecutorService mExecutor = Executors.newScheduledThreadPool(1);
-    private final Map<UUri, BiConsumer<UMessage, CompletableFuture<UPayload>>> mMethodHandlers = new HashMap<>();
-    private final URpcListener mRequestEventListener = this::handleRequestEvent;
+    private final Map<UUri, Consumer<UMessage>> mMethodHandlers = new HashMap<>();
+    private final UListener mRequestListener = this::handleRequest;
     private final Binder mBinder = new Binder() {
     };
     private final AtomicBoolean mDatabaseInitialized = new AtomicBoolean(false);
@@ -121,19 +116,17 @@ public class UDiscoveryService extends Service implements UPClient.ServiceLifecy
     }
 
     @VisibleForTesting
-    UDiscoveryService(Context context, RPCHandler rpcHandler, UPClient upClient,
-                      ResourceLoader resourceLoader) {
+    UDiscoveryService(RPCHandler rpcHandler, UPClient upClient, ResourceLoader resourceLoader) {
         mRpcHandler = rpcHandler;
         mUpClient = upClient;
         mResourceLoader = resourceLoader;
-        upClientInit().join();
+        init().join();
     }
 
-    @Nullable
     @Override
-    public IBinder onBind(@NonNull Intent intent) {
+    public @Nullable IBinder onBind(@NonNull Intent intent) {
         if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "onBind"));
+            Log.d(TAG, join(Key.METHOD, "onBind"));
         }
         return mBinder;
     }
@@ -143,22 +136,28 @@ public class UDiscoveryService extends Service implements UPClient.ServiceLifecy
     public void onCreate() {
         super.onCreate();
         if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "onCreate - Starting uDiscovery"));
+            Log.d(TAG, join(Key.METHOD, "onCreate"));
         }
         startForegroundService();
-        mUpClient = UPClient.create(getApplicationContext(), SERVICE, mExecutor, this);
+        mUpClient = UPClient.create(getApplicationContext(), SERVICE, mExecutor, (client, ready) -> {
+            if (ready) {
+                Log.i(TAG, join(Key.EVENT, "uPClient connected"));
+            } else {
+                Log.w(TAG, join(Key.EVENT, "uPClient unexpectedly disconnected"));
+            }
+        });
         ObserverManager observerManager = new ObserverManager(this);
         Notifier notifier = new Notifier(observerManager, mUpClient);
         DiscoveryManager discoveryManager = new DiscoveryManager(notifier);
         AssetManager assetManager = new AssetManager();
         mResourceLoader = new ResourceLoader(this, assetManager, discoveryManager);
         mRpcHandler = new RPCHandler(this, assetManager, discoveryManager, observerManager);
-        upClientInit();
+        init();
     }
 
     private void startForegroundService() {
         if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "startForegroundService"));
+            Log.d(TAG, join(Key.METHOD, "startForegroundService"));
         }
         final NotificationChannel channel = new NotificationChannel(NOTIFICATION_CHANNEL_ID,
                 NOTIFICATION_CHANNEL_NAME,
@@ -177,13 +176,10 @@ public class UDiscoveryService extends Service implements UPClient.ServiceLifecy
         startForeground(NOTIFICATION_ID, notification);
     }
 
-    private synchronized CompletableFuture<Void> upClientInit() {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "upClientInit"));
-        }
+    private synchronized CompletableFuture<Void> init() {
         return mUpClient.connect()
                 .thenCompose(status -> {
-                    Log.i(TAG, join(Key.MESSAGE, "upClient.isConnected()", Key.CONNECTION, mUpClient.isConnected()));
+                    logStatus(TAG, "connect", status);
                     return isOk(status) ?
                             CompletableFuture.completedFuture(status) :
                             CompletableFuture.failedFuture(new UStatusException(status));
@@ -193,211 +189,156 @@ public class UDiscoveryService extends Service implements UPClient.ServiceLifecy
                     mDatabaseInitialized.set(isInitialized);
                     if (mUpClient.isConnected()) {
                         registerAllMethods();
-                        createNotificationTopic();
                     }
                 }).toCompletableFuture();
     }
 
     private void registerAllMethods() {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "registerAllMethods, upClient Connect", Key.STATUS, mUpClient.isConnected()));
-        }
         CompletableFuture.allOf(
-                        registerMethod(METHOD_LOOKUP_URI, this::executeLookupUri),
-                        registerMethod(METHOD_FIND_NODES, this::executeFindNodes),
-                        registerMethod(METHOD_UPDATE_NODE, this::executeUpdateNode),
-                        registerMethod(METHOD_FIND_NODE_PROPERTIES, this::executeFindNodesProperty),
-                        registerMethod(METHOD_ADD_NODES, this::executeAddNodes),
-                        registerMethod(METHOD_DELETE_NODES, this::executeDeleteNodes),
-                        registerMethod(METHOD_UPDATE_PROPERTY, this::executeUpdateProperty),
-                        registerMethod(METHOD_REGISTER_FOR_NOTIFICATIONS, this::executeRegisterNotification),
-                        registerMethod(METHOD_UNREGISTER_FOR_NOTIFICATIONS, this::executeUnregisterNotification))
+                        registerMethod(METHOD_LOOKUP_URI, this::lookupUri),
+                        registerMethod(METHOD_FIND_NODES, this::findNodes),
+                        registerMethod(METHOD_UPDATE_NODE, this::updateNode),
+                        registerMethod(METHOD_FIND_NODE_PROPERTIES, this::findNodesProperty),
+                        registerMethod(METHOD_ADD_NODES, this::addNodes),
+                        registerMethod(METHOD_DELETE_NODES, this::deleteNodes),
+                        registerMethod(METHOD_UPDATE_PROPERTY, this::updateProperty),
+                        registerMethod(METHOD_REGISTER_FOR_NOTIFICATIONS, this::registerNotification),
+                        registerMethod(METHOD_UNREGISTER_FOR_NOTIFICATIONS, this::unregisterNotification))
                 .exceptionally(e -> {
                     logStatus(TAG, "registerAllMethods", toStatus(e));
                     return null;
                 });
     }
 
-    private void executeLookupUri(@NonNull UMessage requestEvent, @NonNull CompletableFuture<UPayload> responseFuture) {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "executeLookupUri"));
-        }
+    private void lookupUri(@NonNull UMessage requestMessage) {
         try {
             checkArgument(mDatabaseInitialized.get(), UCode.FAILED_PRECONDITION, DATABASE_NOT_INITIALIZED);
-            if (DEBUG) {
-                Log.d(TAG, join(Key.EVENT, "LookupUri", Key.REQUEST, stringify(requestEvent)));
-            }
-            responseFuture.complete(mRpcHandler.processLookupUriFromLDS(requestEvent));
+            sendResponse(requestMessage, mRpcHandler.processLookupUriFromLDS(requestMessage));
         } catch (Exception e) {
-            UStatus status = logStatus(TAG, "executeLookupUri", toStatus(e));
-            LookupUriResponse response = LookupUriResponse.newBuilder().setStatus(status).build();
-            responseFuture.complete(packToAny(response));
+            final UStatus status = logStatus(TAG, METHOD_LOOKUP_URI, toStatus(e));
+            sendResponse(requestMessage, packToAny(LookupUriResponse.newBuilder().setStatus(status).build()));
         }
     }
 
-    private void executeFindNodes(@NonNull UMessage requestEvent, @NonNull CompletableFuture<UPayload> responseFuture) {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "executeFindNodes"));
-        }
+    private void findNodes(@NonNull UMessage requestMessage) {
         try {
             checkArgument(mDatabaseInitialized.get(), UCode.FAILED_PRECONDITION, DATABASE_NOT_INITIALIZED);
-            if (DEBUG) {
-                Log.d(TAG, join(Key.EVENT, "FindNodes", Key.REQUEST, stringify(requestEvent)));
-            }
-            responseFuture.complete(mRpcHandler.processFindNodesFromLDS(requestEvent));
+            sendResponse(requestMessage, mRpcHandler.processFindNodesFromLDS(requestMessage));
         } catch (Exception e) {
-            UStatus status = logStatus(TAG, "executeFindNodes", toStatus(e));
-            FindNodesResponse response = FindNodesResponse.newBuilder().setStatus(status).build();
-            responseFuture.complete(packToAny(response));
+            final UStatus status = logStatus(TAG, METHOD_FIND_NODES, toStatus(e));
+            sendResponse(requestMessage, packToAny(FindNodesResponse.newBuilder().setStatus(status).build()));
         }
     }
 
-    private void executeUpdateNode(@NonNull UMessage requestEvent, @NonNull CompletableFuture<UPayload> future) {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "executeUpdateNode"));
-        }
+    private void updateNode(@NonNull UMessage requestMessage) {
         try {
             checkArgument(mDatabaseInitialized.get(), UCode.FAILED_PRECONDITION, DATABASE_NOT_INITIALIZED);
-            if (DEBUG) {
-                Log.d(TAG, join(Key.EVENT, "received for UpdateNode",
-                        Key.REQUEST, stringify(requestEvent)));
-            }
-            future.complete(mRpcHandler.processLDSUpdateNode(requestEvent));
+            sendResponse(requestMessage, mRpcHandler.processLDSUpdateNode(requestMessage));
         } catch (Exception e) {
-            UStatus status = logStatus(TAG, "executeUpdateNode", toStatus(e));
-            future.complete(packToAny(status));
+            final UStatus status = logStatus(TAG, METHOD_UPDATE_NODE, toStatus(e));
+            sendResponse(requestMessage, packToAny(status));
         }
     }
 
-    private void executeFindNodesProperty(@NonNull UMessage requestEvent, @NonNull CompletableFuture<UPayload> future) {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "executeFindNodesProperty"));
-        }
+    private void findNodesProperty(@NonNull UMessage requestMessage) {
         try {
             checkArgument(mDatabaseInitialized.get(), UCode.FAILED_PRECONDITION, DATABASE_NOT_INITIALIZED);
-            future.complete(mRpcHandler.processFindNodeProperties(requestEvent));
+            sendResponse(requestMessage, mRpcHandler.processFindNodeProperties(requestMessage));
         } catch (Exception e) {
-            UStatus status = logStatus(TAG, "executeFindNodesProperty", toStatus(e));
-            FindNodePropertiesResponse response = FindNodePropertiesResponse.newBuilder().setStatus(status).build();
-            future.complete(packToAny(response));
+            final UStatus status = logStatus(TAG, METHOD_FIND_NODE_PROPERTIES, toStatus(e));
+            sendResponse(requestMessage, packToAny(FindNodePropertiesResponse.newBuilder().setStatus(status).build()));
         }
     }
 
-    private void executeAddNodes(@NonNull UMessage requestEvent, @NonNull CompletableFuture<UPayload> future) {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "executeAddNodes"));
-        }
+    private void addNodes(@NonNull UMessage requestMessage) {
         try {
             checkArgument(mDatabaseInitialized.get(), UCode.FAILED_PRECONDITION, DATABASE_NOT_INITIALIZED);
-            if (DEBUG) {
-                Log.d(TAG, join(Key.EVENT, "received for AddNodes", Key.REQUEST, stringify(requestEvent)));
-            }
-            future.complete(mRpcHandler.processAddNodesLDS(requestEvent));
+            sendResponse(requestMessage, mRpcHandler.processAddNodesLDS(requestMessage));
         } catch (Exception e) {
-            UStatus status = logStatus(TAG, "executeAddNodes", toStatus(e));
-            future.complete(packToAny(status));
+            final UStatus status = logStatus(TAG, METHOD_ADD_NODES, toStatus(e));
+            sendResponse(requestMessage, packToAny(status));
         }
     }
 
-    private void executeDeleteNodes(@NonNull UMessage requestEvent, @NonNull CompletableFuture<UPayload> future) {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "executeDeleteNodes"));
-        }
+    private void deleteNodes(@NonNull UMessage requestMessage) {
         try {
             checkArgument(mDatabaseInitialized.get(), UCode.FAILED_PRECONDITION, DATABASE_NOT_INITIALIZED);
-            Log.i(TAG, join(Key.EVENT, "received for DeleteNodes", Key.REQUEST, stringify(requestEvent)));
-            future.complete(mRpcHandler.processDeleteNodes(requestEvent));
+            sendResponse(requestMessage, mRpcHandler.processDeleteNodes(requestMessage));
         } catch (Exception e) {
-            UStatus status = logStatus(TAG, "executeDeleteNodes", toStatus(e));
-            future.complete(packToAny(status));
+            final UStatus status = logStatus(TAG, METHOD_DELETE_NODES, toStatus(e));
+            sendResponse(requestMessage, packToAny(status));
         }
     }
 
-    private void executeUpdateProperty(@NonNull UMessage requestEvent, @NonNull CompletableFuture<UPayload> future) {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "executeUpdateProperty"));
-        }
+    private void updateProperty(@NonNull UMessage requestMessage) {
         try {
             checkArgument(mDatabaseInitialized.get(), UCode.FAILED_PRECONDITION, DATABASE_NOT_INITIALIZED);
-            future.complete(mRpcHandler.processLDSUpdateProperty(requestEvent));
+            sendResponse(requestMessage, mRpcHandler.processLDSUpdateProperty(requestMessage));
         } catch (Exception e) {
-            UStatus status = logStatus(TAG, "executeUpdateProperty", toStatus(e));
-            future.complete(packToAny(status));
+            final UStatus status = logStatus(TAG, METHOD_UPDATE_PROPERTY, toStatus(e));
+            sendResponse(requestMessage, packToAny(status));
         }
     }
 
-    private void executeRegisterNotification(@NonNull UMessage requestEvent,
-                                             @NonNull CompletableFuture<UPayload> future) {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "executeRegisterNotification"));
-        }
+    private void registerNotification(@NonNull UMessage requestMessage) {
         try {
             checkArgument(mDatabaseInitialized.get(), UCode.FAILED_PRECONDITION, DATABASE_NOT_INITIALIZED);
-            Log.i(TAG, join(Key.EVENT, "received for Register Notification", Key.REQUEST, stringify(requestEvent)));
-            UPayload uPayload = mRpcHandler.processNotificationRegistration(requestEvent, METHOD_REGISTER_FOR_NOTIFICATIONS);
-            future.complete(uPayload);
+            sendResponse(requestMessage, mRpcHandler.processRegisterNotifications(requestMessage));
         } catch (Exception e) {
-            UStatus status = logStatus(TAG, "executeRegisterNotification", toStatus(e));
-            future.complete(packToAny(status));
+            final UStatus status = logStatus(TAG, METHOD_REGISTER_FOR_NOTIFICATIONS, toStatus(e));
+            sendResponse(requestMessage, packToAny(status));
         }
     }
 
-    private void executeUnregisterNotification(@NonNull UMessage requestEvent,
-                                               @NonNull CompletableFuture<UPayload> future) {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "executeUnregisterNotification"));
-        }
+    private void unregisterNotification(@NonNull UMessage requestMessage) {
         try {
             checkArgument(mDatabaseInitialized.get(), UCode.FAILED_PRECONDITION, DATABASE_NOT_INITIALIZED);
-            Log.i(TAG, join(Key.EVENT, "received for Unregister Notification", Key.REQUEST, stringify(requestEvent)));
-            UPayload uPayload = mRpcHandler.processNotificationRegistration(requestEvent, METHOD_UNREGISTER_FOR_NOTIFICATIONS);
-            future.complete(uPayload);
+            sendResponse(requestMessage, mRpcHandler.processUnregisterNotifications(requestMessage));
         } catch (Exception e) {
-            UStatus status = logStatus(TAG, "executeUnregisterNotification", toStatus(e));
-            future.complete(packToAny(status));
+            final UStatus status = logStatus(TAG, METHOD_UNREGISTER_FOR_NOTIFICATIONS, toStatus(e));
+            sendResponse(requestMessage, packToAny(status));
         }
     }
 
-    private CompletableFuture<UStatus> registerMethod(@NonNull String methodName,
-                                                      @NonNull BiConsumer<UMessage, CompletableFuture<UPayload>> handler) {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "registerMethod"));
-        }
-        final UUri methodUri = UUri.newBuilder().setEntity(SERVICE).
-                setResource(UResourceBuilder.forRpcRequest(methodName)).build();
+    private static @NonNull UUri buildMethodUri(@NonNull String name) {
+        return UUri.newBuilder()
+                .setEntity(SERVICE)
+                .setResource(UResourceBuilder.forRpcRequest(name))
+                .build();
+    }
+
+    private CompletableFuture<UStatus> registerMethod(@NonNull String methodName, @NonNull Consumer<UMessage> handler) {
+        final UUri methodUri = buildMethodUri(methodName);
         return CompletableFuture.supplyAsync(() -> {
-            final UStatus status = mUpClient.registerRpcListener(methodUri, mRequestEventListener);
-            logStatus(TAG, "Register listener for '" + methodUri + "'", status);
+            final UStatus status = mUpClient.registerListener(methodUri, mRequestListener);
             if (isOk(status)) {
                 mMethodHandlers.put(methodUri, handler);
-            } else {
-                throw new UStatusException(UCode.INVALID_ARGUMENT, "URI not implemented or invalid argument");
             }
-            return status;
+            return logStatus(TAG, "registerMethod", status, Key.URI, stringify(methodUri));
         });
     }
 
     private CompletableFuture<UStatus> unregisterMethod(@NonNull String methodName) {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "unregisterMethod"));
-        }
-        final UUri methodUri = UUri.newBuilder().setEntity(SERVICE).
-                setResource(UResourceBuilder.forRpcRequest(methodName)).build();
+        final UUri methodUri = buildMethodUri(methodName);
         return CompletableFuture.supplyAsync(() -> {
-            final UStatus status = mUpClient.unregisterRpcListener(methodUri, mRequestEventListener);
-            logStatus(TAG, "Unregister listener for '" + methodUri + "'", status);
+            final UStatus status = mUpClient.unregisterListener(methodUri, mRequestListener);
             mMethodHandlers.remove(methodUri);
-            if (!isOk(status)) {
-                throw new UStatusException(status.getCode(), status.getMessage());
-            }
-            return status;
+            return logStatus(TAG, "unregisterMethod", status, Key.URI, stringify(methodUri));
         });
+    }
+
+    private void sendResponse(@NonNull UMessage requestMessage, @NonNull UPayload responsePayload) {
+        final UMessage responseMessage = UMessage.newBuilder()
+                .setAttributes(UAttributesBuilder.response(requestMessage.getAttributes()).build())
+                .setPayload(responsePayload)
+                .build();
+        mUpClient.send(responseMessage);
     }
 
     @Override
     public void onDestroy() {
         if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "onDestroy"));
+            Log.d(TAG, join(Key.METHOD, "onDestroy"));
         }
         CompletableFuture.allOf(
                         unregisterMethod(METHOD_LOOKUP_URI),
@@ -409,53 +350,20 @@ public class UDiscoveryService extends Service implements UPClient.ServiceLifecy
                         unregisterMethod(METHOD_UPDATE_PROPERTY),
                         unregisterMethod(METHOD_REGISTER_FOR_NOTIFICATIONS),
                         unregisterMethod(METHOD_UNREGISTER_FOR_NOTIFICATIONS))
-                .exceptionally(e -> {
-                    logStatus(TAG, "onDestroy", toStatus(e));
-                    return null;
-                })
                 .thenCompose(it -> mUpClient.disconnect())
-                .whenComplete((status, exception) -> logStatus(TAG, "upClient disconnect", status));
+                .whenComplete((status, exception) -> logStatus(TAG, "disconnect", status));
         mRpcHandler.shutdown();
         super.onDestroy();
     }
 
-    private void handleRequestEvent(@NonNull UMessage requestEvent, @NonNull CompletableFuture<UPayload> future) {
+    private void handleRequest(@NonNull UMessage requestMessage) {
         if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "handleRequestEvent"));
+            Log.d(TAG, join(Key.METHOD, "handleRequest", Key.MESSAGE, stringify(requestMessage)));
         }
-        final UUri uUri = requestEvent.getAttributes().getSink();
-        final boolean isSinkAvailable = requestEvent.getAttributes().hasSink();
-        if (isSinkAvailable) {
-            final BiConsumer<UMessage, CompletableFuture<UPayload>> handler = mMethodHandlers.get(uUri);
-            if (handler == null) {
-                UStatus sts = buildStatus(UCode.INVALID_ARGUMENT, "unregistered method " + uUri);
-                future.completeExceptionally(new UStatusException(sts.getCode(), sts.getMessage()));
-            } else {
-                handler.accept(requestEvent, future);
-            }
-        }
-    }
-
-    private void createNotificationTopic() {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.REQUEST, "CreateTopic", Key.URI, quote(TOPIC_NODE_NOTIFICATION.toString())));
-        }
-        mUpClient.invokeMethod(TOPIC_NODE_NOTIFICATION, UPayload.getDefaultInstance(), CallOptions.DEFAULT)
-                .exceptionally(e -> {
-                    Log.e(TAG, join("registerAllMethods", toStatus(e)));
-                    return null;
-                }).thenAccept(status -> Log.i(TAG, join("createNotificationTopic", status)));
-    }
-
-    @Override
-    public void onLifecycleChanged(@NonNull UPClient upClient, boolean ready) {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.EVENT, "onLifecycleChanged"));
-        }
-        if (ready) {
-            Log.i(TAG, join(Key.EVENT, "upClient is connected"));
-        } else {
-            Log.i(TAG, join(Key.EVENT, "upClient is disconnected"));
+        final UUri methodUri = requestMessage.getAttributes().getSink();
+        final Consumer<UMessage> handler = mMethodHandlers.get(methodUri);
+        if (handler != null) {
+            handler.accept(requestMessage);
         }
     }
 }

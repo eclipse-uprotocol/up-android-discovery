@@ -24,7 +24,6 @@
 
 package org.eclipse.uprotocol.core.udiscovery;
 
-import static org.eclipse.uprotocol.common.util.UStatusUtils.checkStringNotEmpty;
 import static org.eclipse.uprotocol.common.util.UStatusUtils.isOk;
 import static org.eclipse.uprotocol.common.util.UStatusUtils.toStatus;
 import static org.eclipse.uprotocol.common.util.log.Formatter.join;
@@ -35,8 +34,15 @@ import static org.eclipse.uprotocol.core.udiscovery.common.Constants.UNEXPECTED_
 import static org.eclipse.uprotocol.core.udiscovery.internal.Utils.deserializeUriList;
 import static org.eclipse.uprotocol.core.udiscovery.internal.Utils.logStatus;
 import static org.eclipse.uprotocol.core.udiscovery.internal.Utils.toLongUri;
+import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.METHOD_ADD_NODES;
+import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.METHOD_DELETE_NODES;
+import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.METHOD_FIND_NODES;
+import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.METHOD_FIND_NODE_PROPERTIES;
+import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.METHOD_LOOKUP_URI;
 import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.METHOD_REGISTER_FOR_NOTIFICATIONS;
 import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.METHOD_UNREGISTER_FOR_NOTIFICATIONS;
+import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.METHOD_UPDATE_NODE;
+import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.METHOD_UPDATE_PROPERTY;
 import static org.eclipse.uprotocol.core.udiscovery.v3.UDiscovery.SERVICE;
 import static org.eclipse.uprotocol.transport.builder.UPayloadBuilder.packToAny;
 import static org.eclipse.uprotocol.transport.builder.UPayloadBuilder.unpack;
@@ -97,11 +103,12 @@ import java.util.Map;
 public class RPCHandler implements PersistInterface {
 
     protected static final String TAG = tag(SERVICE.getName());
-    protected static final String NODEURI = "nodeUri";
+    protected static final String NODE_URI = "nodeUri";
     protected static final String DEPTH = "depth";
     protected static final String NODE = "node";
-    protected static final String NODELIST = "nodeList";
-    protected static final String URILIST = "uriList";
+    protected static final String NODE_LIST = "nodeList";
+    protected static final String PROPERTIES = "properties";
+    protected static final String URI_LIST = "uriList";
     protected static boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
     protected static boolean VERBOSE = Log.isLoggable(TAG, Log.VERBOSE);
     final DiscoveryManager mDiscoveryManager;
@@ -136,17 +143,17 @@ public class RPCHandler implements PersistInterface {
             final UUri uri = unpack(payload, UUri.class).
                     orElseThrow(() -> new UStatusException(UCode.INVALID_ARGUMENT, UNEXPECTED_PAYLOAD));
             if (DEBUG) {
-                Log.d(TAG, join(Key.REQUEST, "LookupUri", Key.URI, toLongUri(uri)));
+                Log.d(TAG, join(Key.REQUEST, METHOD_LOOKUP_URI, Key.URI, toLongUri(uri)));
             }
             final Pair<UUriBatch, UStatus> pair = mDiscoveryManager.lookupUri(uri);
             final UUriBatch batch = pair.first;
             final UStatus status = pair.second;
             if (DEBUG) {
-                Log.d(TAG, join(Key.RESPONSE, "LookupUri", Key.STATUS, status, Key.URI, batch));
+                Log.d(TAG, join(Key.RESPONSE, METHOD_LOOKUP_URI, Key.STATUS, status, Key.URI, batch));
             }
             response = LookupUriResponse.newBuilder().setUris(batch).setStatus(status).build();
         } catch (Exception e) {
-            final UStatus status = logStatus(TAG, "LookupUri", toStatus(e));
+            final UStatus status = logStatus(TAG, METHOD_LOOKUP_URI, toStatus(e));
             response = LookupUriResponse.newBuilder().setStatus(status).build();
         }
         return packToAny(response);
@@ -162,17 +169,17 @@ public class RPCHandler implements PersistInterface {
             final UUri uri = LongUriSerializer.instance().deserialize(rawUri);
             final int depth = request.hasDepth() ? request.getDepth() : -1;
             if (DEBUG) {
-                Log.d(TAG, join(Key.REQUEST, "FindNodes", NODEURI, rawUri, DEPTH, depth));
+                Log.d(TAG, join(Key.REQUEST, METHOD_FIND_NODES, NODE_URI, rawUri, DEPTH, depth));
             }
             final Pair<Node, UStatus> pair = mDiscoveryManager.findNode(uri, depth);
             final Node node = pair.first;
             final UStatus status = pair.second;
             if (DEBUG) {
-                Log.d(TAG, join(Key.RESPONSE, "FindNodes", Key.STATUS, status, NODE, node));
+                Log.d(TAG, join(Key.RESPONSE, METHOD_FIND_NODES, Key.STATUS, status, NODE, node));
             }
             response = FindNodesResponse.newBuilder().addNodes(node).setStatus(status).build();
         } catch (Exception e) {
-            final UStatus status = logStatus(TAG, "FindNodes", toStatus(e));
+            final UStatus status = logStatus(TAG, METHOD_FIND_NODES, toStatus(e));
             response = FindNodesResponse.newBuilder().setStatus(status).build();
         }
         return packToAny(response);
@@ -188,22 +195,21 @@ public class RPCHandler implements PersistInterface {
             final UUri uri = LongUriSerializer.instance().deserialize(rawUri);
             final ProtocolStringList list = request.getPropertiesList();
             if (DEBUG) {
-                Log.d(TAG, join(Key.REQUEST, "FindNodeProperties", NODEURI, rawUri,
-                        "properties", list));
+                Log.d(TAG, join(Key.REQUEST, METHOD_FIND_NODE_PROPERTIES, NODE_URI, rawUri, PROPERTIES, list));
             }
             final Pair<Map<String, PropertyValue>, UStatus> pair = mDiscoveryManager.findNodeProperties(uri, list);
             final Map<String, PropertyValue> propertiesMap = pair.first;
             final UStatus status = pair.second;
             if (DEBUG) {
-                Log.d(TAG, join(Key.RESPONSE, "FindNodeProperties", Key.STATUS, status,
-                        "properties", propertiesMap));
+                Log.d(TAG, join(Key.RESPONSE, METHOD_FIND_NODE_PROPERTIES, Key.STATUS, status,
+                        PROPERTIES, propertiesMap));
             }
             response = FindNodePropertiesResponse.newBuilder()
                     .putAllProperties(propertiesMap)
                     .setStatus(status)
                     .build();
         } catch (Exception e) {
-            final UStatus status = logStatus(TAG, "FindNodeProperties", toStatus(e));
+            final UStatus status = logStatus(TAG, METHOD_FIND_NODE_PROPERTIES, toStatus(e));
             response = FindNodePropertiesResponse.newBuilder().setStatus(status).build();
         }
         return packToAny(response);
@@ -219,15 +225,15 @@ public class RPCHandler implements PersistInterface {
             final Node node = request.getNode();
             final int ttl = request.hasTtl() ? message.getAttributes().getTtl() : -1;
             if (DEBUG) {
-                Log.d(TAG, join(Key.REQUEST, "UpdateNode", NODE, node, Key.TTL, ttl));
+                Log.d(TAG, join(Key.REQUEST, METHOD_UPDATE_NODE, NODE, node, Key.TTL, ttl));
             }
             status = mDiscoveryManager.updateNode(node, ttl);
             if (DEBUG) {
-                Log.d(TAG, join(Key.RESPONSE, "UpdateNode", Key.STATUS, status));
+                Log.d(TAG, join(Key.RESPONSE, METHOD_UPDATE_NODE, Key.STATUS, status));
             }
             refreshDatabase(status);
         } catch (Exception e) {
-            status = logStatus(TAG, "UpdateNode", toStatus(e));
+            status = logStatus(TAG, METHOD_UPDATE_NODE, toStatus(e));
         }
         return packToAny(status);
     }
@@ -243,16 +249,16 @@ public class RPCHandler implements PersistInterface {
             final String rawUri = request.getUri();
             final UUri uri = LongUriSerializer.instance().deserialize(rawUri);
             if (DEBUG) {
-                Log.d(TAG, join(Key.REQUEST, "UpdateNodeProperty", Key.NAME, name,
-                        Key.VALUE, value, NODEURI, rawUri));
+                Log.d(TAG, join(Key.REQUEST, METHOD_UPDATE_PROPERTY, Key.NAME, name,
+                        Key.VALUE, value, NODE_URI, rawUri));
             }
             status = mDiscoveryManager.updateProperty(name, value, uri);
             if (DEBUG) {
-                Log.d(TAG, join(Key.RESPONSE, "UpdateNodeProperty", Key.STATUS, status));
+                Log.d(TAG, join(Key.RESPONSE, METHOD_UPDATE_PROPERTY, Key.STATUS, status));
             }
             refreshDatabase(status);
         } catch (Exception e) {
-            status = logStatus(TAG, "UpdateNodeProperty", toStatus(e));
+            status = logStatus(TAG, METHOD_UPDATE_PROPERTY, toStatus(e));
         }
         return packToAny(status);
     }
@@ -267,18 +273,18 @@ public class RPCHandler implements PersistInterface {
             final UUri uri = LongUriSerializer.instance().deserialize(rawUri);
             final List<Node> nodeList = request.getNodesList();
             if (DEBUG) {
-                Log.d(TAG, join(Key.REQUEST, "AddNodes", PARENT_URI, rawUri));
+                Log.d(TAG, join(Key.REQUEST, METHOD_ADD_NODES, PARENT_URI, rawUri));
             }
             if (VERBOSE) {
-                Log.v(TAG, join(Key.REQUEST, "AddNodes", NODELIST, nodeList));
+                Log.v(TAG, join(Key.REQUEST, METHOD_ADD_NODES, NODE_LIST, nodeList));
             }
             status = mDiscoveryManager.addNodes(uri, nodeList);
             refreshDatabase(status);
             if (DEBUG) {
-                Log.d(TAG, join(Key.RESPONSE, "AddNodes", Key.STATUS, status));
+                Log.d(TAG, join(Key.RESPONSE, METHOD_ADD_NODES, Key.STATUS, status));
             }
         } catch (Exception e) {
-            status = logStatus(TAG, "AddNodes", toStatus(e));
+            status = logStatus(TAG, METHOD_ADD_NODES, toStatus(e));
         }
         return packToAny(status);
     }
@@ -292,64 +298,61 @@ public class RPCHandler implements PersistInterface {
             final ProtocolStringList urisList = request.getUrisList();
             final List<UUri> nodeUriList = deserializeUriList(urisList);
             if (DEBUG) {
-                Log.d(TAG, join(Key.REQUEST, "DeleteNodes", URILIST, urisList));
+                Log.d(TAG, join(Key.REQUEST, METHOD_DELETE_NODES, URI_LIST, urisList));
             }
             status = mDiscoveryManager.deleteNodes(nodeUriList);
             if (DEBUG) {
-                Log.d(TAG, join(Key.RESPONSE, "DeleteNodes", Key.STATUS, status));
+                Log.d(TAG, join(Key.RESPONSE, METHOD_DELETE_NODES, Key.STATUS, status));
             }
             refreshDatabase(status);
         } catch (Exception e) {
-            status = logStatus(TAG, "DeleteNodes", toStatus(e));
+            status = logStatus(TAG, METHOD_DELETE_NODES, toStatus(e));
         }
         return packToAny(status);
     }
 
-    public UPayload processNotificationRegistration(@NonNull UMessage message, String methodName) {
+    public UPayload processRegisterNotifications(@NonNull UMessage message) {
         UStatus status;
         try {
-            checkStringNotEmpty(methodName, "methodName is empty");
             final UPayload payload = message.getPayload();
             final NotificationsRequest request = unpack(payload, NotificationsRequest.class).
                     orElseThrow(() -> new UStatusException(UCode.INVALID_ARGUMENT, UNEXPECTED_PAYLOAD));
-            final String rawUri = request.getObserver().getUri();
-            final UUri observerUri = LongUriSerializer.instance().deserialize(rawUri);
+            final UUri observerUri = LongUriSerializer.instance().deserialize(request.getObserver().getUri());
             final List<UUri> nodeUriList = deserializeUriList(request.getUrisList());
-            if (METHOD_REGISTER_FOR_NOTIFICATIONS.equals(methodName)) {
-                status = registerNotifications(observerUri, nodeUriList);
-            } else if (METHOD_UNREGISTER_FOR_NOTIFICATIONS.equals(methodName)) {
-                status = UnregisterForNotifications(observerUri, nodeUriList);
-            } else {
-                throw new UStatusException(UCode.INVALID_ARGUMENT, "unknown method " + methodName);
+            if (DEBUG) {
+                Log.d(TAG, join(Key.REQUEST, METHOD_REGISTER_FOR_NOTIFICATIONS,
+                        OBSERVER_URI, toLongUri(observerUri), URI_LIST, nodeUriList));
+            }
+            status = mObserverManager.registerObserver(nodeUriList, observerUri);
+            if (DEBUG) {
+                Log.d(TAG, join(Key.RESPONSE, METHOD_REGISTER_FOR_NOTIFICATIONS, Key.STATUS, status));
             }
         } catch (Exception e) {
-            status = logStatus(TAG, "processNotificationRegistration", toStatus(e));
+            status = logStatus(TAG, METHOD_REGISTER_FOR_NOTIFICATIONS, toStatus(e));
         }
         return packToAny(status);
     }
 
-    private UStatus registerNotifications(@NonNull UUri observer, @NonNull List<UUri> nodeUriList) {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.REQUEST, "RegisterForNotifications",
-                    OBSERVER_URI, toLongUri(observer), URILIST, nodeUriList));
+    public UPayload processUnregisterNotifications(@NonNull UMessage message) {
+        UStatus status;
+        try {
+            final UPayload payload = message.getPayload();
+            final NotificationsRequest request = unpack(payload, NotificationsRequest.class).
+                    orElseThrow(() -> new UStatusException(UCode.INVALID_ARGUMENT, UNEXPECTED_PAYLOAD));
+            final UUri observerUri = LongUriSerializer.instance().deserialize(request.getObserver().getUri());
+            final List<UUri> nodeUriList = deserializeUriList(request.getUrisList());
+            if (DEBUG) {
+                Log.d(TAG, join(Key.REQUEST, METHOD_UNREGISTER_FOR_NOTIFICATIONS,
+                        OBSERVER_URI, toLongUri(observerUri), URI_LIST, nodeUriList));
+            }
+            status = mObserverManager.unregisterObserver(nodeUriList, observerUri);
+            if (DEBUG) {
+                Log.d(TAG, join(Key.RESPONSE, METHOD_UNREGISTER_FOR_NOTIFICATIONS, Key.STATUS, status));
+            }
+        } catch (Exception e) {
+            status = logStatus(TAG, METHOD_UNREGISTER_FOR_NOTIFICATIONS, toStatus(e));
         }
-        final UStatus status = mObserverManager.registerObserver(nodeUriList, observer);
-        if (DEBUG) {
-            Log.d(TAG, join(Key.RESPONSE, "RegisterForNotifications", Key.STATUS, status));
-        }
-        return status;
-    }
-
-    private UStatus UnregisterForNotifications(@NonNull UUri observer, @NonNull List<UUri> nodeUriList) {
-        if (DEBUG) {
-            Log.d(TAG, join(Key.REQUEST, "UnregisterForNotifications",
-                    OBSERVER_URI, toLongUri(observer), URILIST, nodeUriList));
-        }
-        final UStatus status = mObserverManager.unregisterObserver(nodeUriList, observer);
-        if (DEBUG) {
-            Log.d(TAG, join(Key.RESPONSE, "UnregisterForNotifications", Key.STATUS, status));
-        }
-        return status;
+        return packToAny(status);
     }
 
     private void refreshDatabase(UStatus status) {
